@@ -13,7 +13,7 @@
 
 from os import path as op
 
-from numpy.distutils.core import setup
+from setuptools import setup
 
 # get the version
 version = None
