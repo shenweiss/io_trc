@@ -2,7 +2,7 @@ import numpy as np
 
 from mne.utils import logger
 
-fname = '/Users/fraimondo/data/intra/EEG_92.TRC'
+fname = '/Users/fraimondo/data/intra/EEG_12.TRC'
 
 fid = open(fname, 'r')
 fid.seek(175, 0)
@@ -26,28 +26,29 @@ version = np.fromfile(fid, 'S1', 32).astype('U1')
 version = ''.join(version[:-2])  # Discard last 2 chars 0x00 0x1A
 
 logger.info('Reading {}'.format(version))
+logger.info('Reading Recording data')
 
 # Laboratory
 laboratory = np.fromfile(fid, 'S1', 32).astype('U1')
 laboratory = ''.join(laboratory[:-1])  # Discard last char 0x00
-logger.info('Laboratory: {}'.format(laboratory))
+logger.info('\tLaboratory: {}'.format(laboratory))
 
 # Patient Data
-logger.info('Patient data')
+logger.info('\tPatient data')
 
 surname = np.fromfile(fid, 'S1', 22).astype('U1')
 surname = ''.join(surname)
-logger.info('    Surname: {}'.format(surname))
+logger.info('\t\tSurname: {}'.format(surname))
 
 name = np.fromfile(fid, 'S1', 20).astype('U1')
 name = ''.join(name)
-logger.info('    Name: {}'.format(name))
+logger.info('\t\tName: {}'.format(name))
 
 birth_month = np.fromfile(fid, 'B', 1)[0]
 birth_day = np.fromfile(fid, 'B', 1)[0]
 birth_year = np.fromfile(fid, 'B', 1)[0] + 1900
 
-logger.info('    Birth Date: {}-{}-{}'.format(
+logger.info('\t\tBirth Date: {}-{}-{}'.format(
     birth_year, birth_month, birth_day))
 
 reserved = np.fromfile(fid, 'B', 19)
@@ -61,41 +62,42 @@ rec_hour = np.fromfile(fid, 'B', 1)[0]
 rec_min = np.fromfile(fid, 'B', 1)[0]
 rec_sec = np.fromfile(fid, 'B', 1)[0]
 
-logger.info('Recording Date: {}-{}-{}'.format(rec_year, rec_month, rec_day))
-logger.info('Recording Time: {}:{}:{}'.format(rec_hour, rec_min, rec_sec))
+logger.info('\tRecording Date: {}-{}-{}'.format(rec_year, rec_month, rec_day))
+logger.info('\tRecording Time: {}:{}:{}'.format(rec_hour, rec_min, rec_sec))
 
 aq_unit = np.fromfile(fid, 'u2', 1)[0]
-logger.info('Acqusition Unit: {}'.format(aq_unit))
+logger.info('\tAcqusition Unit: {}'.format(aq_unit))
 
 file_type = np.fromfile(fid, 'u2', 1)[0]
-logger.info('File Type: {}'.format(file_type))
+logger.info('\tFile Type: {}'.format(file_type))
 
 data_start = np.fromfile(fid, 'u4', 1)[0]
 n_channels = np.fromfile(fid, 'u2', 1)[0]
 row_size = np.fromfile(fid, 'u2', 1)[0]
-logger.info('Data stored at {} in {} channels (multiplexer {})'.format(
+logger.info('\tData stored at {} in {} channels (multiplexer {})'.format(
     data_start, n_channels, row_size))
 
 min_sample_freq = np.fromfile(fid, 'u2', 1)[0]
-logger.info('Min Sample Freq: {}'.format(min_sample_freq))
+logger.info('\tMin Sample Freq: {}'.format(min_sample_freq))
 n_bytes_sample = np.fromfile(fid, 'u2', 1)[0]
-logger.info('Bytes per Sample: {}'.format(n_bytes_sample))
+logger.info('\tBytes per Sample: {}'.format(n_bytes_sample))
 compressed = np.fromfile(fid, 'u2', 1)[0]
-logger.info('Compressed: {}'.format(compressed))
+logger.info('\tCompressed: {}'.format(compressed))
 if compressed == 1:
     logger.error('Cannot read compressed data')
 
 n_montages = np.fromfile(fid, 'u2', 1)[0]
-logger.info('Number of Montages: {}'.format(n_montages))
+logger.info('\tNumber of Montages: {}'.format(n_montages))
 
 video_start = np.fromfile(fid, 'u4', 1)[0]
-logger.info('Video data starts at {}'.format(video_start))
+logger.info('\tVideo data starts at {}'.format(video_start))
 
 video_sync = np.fromfile(fid, 'u2', 1)[0]
-logger.info('Video sync: {}'.format(video_sync))
+logger.info('\tVideo sync: {}'.format(video_sync))
 
 reserved = np.fromfile(fid, 'B', 16)
 
+logger.info('Reading descriptors')
 descriptors = {}
 
 keys = [
@@ -109,11 +111,11 @@ for t_k in keys:
     descriptor = ''.join(descriptor).strip()
     if descriptor != t_k:
         logger.warning(
-            'Wrong descriptor for {} (found {})'.format(t_k, descriptor))
+            '\tWrong descriptor for {} (found {})'.format(t_k, descriptor))
     t_start = np.fromfile(fid, 'u4', 1)[0]
     t_len = np.fromfile(fid, 'u4', 1)[0]
     descriptors[t_k] = dict(start=t_start, len=t_len)
-    logger.info('{}: @{} ({} bytes)'.format(t_k, t_start, t_len))
+    logger.info('\t{}: @{} ({} bytes)'.format(t_k, t_start, t_len))
 
 reserved = np.fromfile(fid, 'B', 208)
 
@@ -161,3 +163,60 @@ while (fid.tell() < el_end):
     electrodes.append(t_el)
 
 electrodes = [electrodes[x] for x in order]
+srates = np.array([x['srate_coef'] for x in electrodes])
+
+if np.unique(srates).shape[0] != 1:
+    raise ValueError('Cannot read data with mixed sample rates')
+
+logger.info('Reading notes')
+notes = {}
+fid.seek(descriptors['NOTE']['start'], 0)
+keep_reading = True
+while keep_reading is True:
+    sample = np.fromfile(fid, 'u4', 1)[0]
+    if sample != 0:
+        text = ''.join(np.fromfile(fid, 'S1', 40).astype('U1')).strip()
+        logger.info('\tNote at sample {}: {}'.format(sample, text))
+        notes[sample] = text
+    else:
+        keep_reading = False
+
+logger.info('Reading flags')
+flags = []
+fid.seek(descriptors['FLAGS']['start'], 0)
+keep_reading = True
+while keep_reading is True:
+    sample_st = np.fromfile(fid, 'i4', 1)[0]
+    sample_end = np.fromfile(fid, 'i4', 1)[0]
+    if 0 in [sample_st or sample_end]:
+        keep_reading = False
+    if sample_st != 0:
+        flags.append((sample_st, sample_end))
+        logger.info('\Flag found [{} - {}]'.format(sample_st, sample_end))
+
+logger.info('Reading segments description')
+segments = {}
+fid.seek(descriptors['TRONCA']['start'], 0)
+keep_reading = True
+while keep_reading is True:
+    time = np.fromfile(fid, 'u4', 1)[0]
+    if time == 0 or fid.tell() == descriptors['TRONCA']['len']:
+        keep_reading = False
+    else:
+        sample = np.fromfile(fid, 'u4', 1)[0]
+        segments[sample] = time
+
+if len(segments) != 0:
+    raise ValueError('Cannot read reduced file')
+
+logger.info('Reading starting impedances')
+fid.seek(descriptors['IMPED_B']['start'], 0)
+for t_el in electrodes:
+    t_el['imped_b+'] = np.fromfile(fid, 'B', 1)[0]
+    t_el['imped_b-'] = np.fromfile(fid, 'B', 1)[0]
+
+logger.info('Reading ending impedances')
+fid.seek(descriptors['IMPED_E']['start'], 0)
+for t_el in electrodes:
+    t_el['imped_e+'] = np.fromfile(fid, 'B', 1)[0]
+    t_el['imped_e-'] = np.fromfile(fid, 'B', 1)[0]
