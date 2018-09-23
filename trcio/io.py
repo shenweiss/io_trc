@@ -13,10 +13,26 @@
 
 
 import numpy as np
+import time
+import datetime
 
 from mne.io.base import BaseRaw
+from mne.io.meas_info import _empty_info
+from mne.io.utils import _create_chs, _mult_cal_one
+from mne.io.constants import FIFF
 
 from mne.utils import verbose, logger
+
+_micromed_units = {
+    -1: 1e-9,   # nVolt
+    0: 1e-6,    # uVolt
+    1: 1e-3,    # mVolt
+    2: 1,       # Volt
+    100: 1,     # %
+    101: 1,     # bpm
+    102: 1      # Adim.
+
+}
 
 
 @verbose
@@ -211,7 +227,7 @@ def _read_raw_trc_header(input_fname, verbose=None):
             t_el['pos_y'] = np.fromfile(fid, 'f4', 1)[0]
             t_el['pos_z'] = np.fromfile(fid, 'f4', 1)[0]
             t_el['pos_coord'] = np.fromfile(fid, 'u2', 1)[0]
-            reserved = np.fromfile(fid, 'B', 24)
+            reserved = np.fromfile(fid, 'B', 24)  # noqa F841
             # print(t_el)
             electrodes.append(t_el)
 
@@ -297,13 +313,19 @@ def _read_raw_trc_header(input_fname, verbose=None):
 
         header['electrodes'] = electrodes
 
+        # Do computations to keep it simpler
+
+        # number of samples
+        fid.seek(0, 2)
+        fsize = fid.tell()
+        n_data_bytes = fsize - data_start
+        header['n_data_bytes'] = n_data_bytes
+        header['n_samples'] = int(n_data_bytes / row_size)
+
+        # sample frequency
+        sfreq = srates[0] * min_sample_freq
+        header['sfreq'] = sfreq
         return header
-
-
-@verbose
-def _read_raw_trc(input_fname, preload=False, verbose=None):
-    """Read TRC file as raw object."""
-    pass
 
 
 class RawTRC(BaseRaw):
@@ -311,11 +333,79 @@ class RawTRC(BaseRaw):
 
     @verbose
     def __init__(self, input_fname, preload=False, verbose=None):
+        logger.info('Reading TRC file header from {}'.format(input_fname))
         self.input_fname = input_fname
-        pass
+        header = self._read_header()
+
+        # TODO: Compute cals
+
+        info = _empty_info(header['sfreq'])
+
+        electrodes = header['electrodes']
+        ch_names = [t_el['label+'] for t_el in electrodes]
+
+        # TODO: Add misc channels
+        eog = []
+        ecg = []
+        emg = []
+        misc = []
+
+        log_gnd = np.array([x['log_gnd'] for x in electrodes])
+        log_max = np.array([x['log_max'] for x in electrodes])
+        log_min = np.array([x['log_min'] for x in electrodes])
+        phys_max = np.array([x['phys_max'] for x in electrodes])
+        phys_min = np.array([x['phys_min'] for x in electrodes])
+        units = [x['meas_unit'] for x in electrodes]
+        unit_scalar = [_micromed_units[x] for x in units]
+
+        cals = (phys_max - phys_min) / (log_max - log_min + 1) * unit_scalar
+
+        ch_coil = FIFF.FIFFV_COIL_EEG
+        ch_kind = FIFF.FIFFV_EEG_CH
+        chs = _create_chs(ch_names, cals, ch_coil, ch_kind, eog, ecg, emg, misc)
+
+        rec_time = datetime.datetime(
+            header['rec_year'], header['rec_month'], header['rec_day'],
+            header['rec_hour'], header['rec_min'], header['rec_sec'])
+        rec_timestamp = time.mktime(rec_time.timetuple())
+        info['meas_date'] = (rec_timestamp, 0)
+        info['chs'] = chs
+        info._update_redundant()
+        header['log_gnd'] = log_gnd
+
+        super(RawTRC, self).__init__(
+            info, preload=preload, orig_format='float', filenames=[input_fname],
+            last_samps=[header['n_samples'] - 1], raw_extras=[header],
+            verbose=verbose)
 
     def _read_segment_file(self, data, idx, fi, start, stop, cals, mult):
-        pass
+
+        header = self._raw_extras[fi]
+        data_start = header['data_start']
+        n_channels = header['n_channels']
+        n_bytes_sample = header['n_bytes_sample']
+        row_size = int(header['row_size'] / n_bytes_sample)
+        sample_size_code = 'u{}'.format(n_bytes_sample)
+        log_gnd = header['log_gnd']
+
+        samples_to_read = int(stop - start)
+
+        chunk_start = start * row_size * n_bytes_sample + data_start  # in bytes
+        chunk_len = samples_to_read * row_size  # in samples
+        logger.info('Reading {} samples from {} (len {})'.format(
+            samples_to_read, chunk_start, chunk_len))
+
+        with open(self.input_fname) as fid:
+            fid.seek(chunk_start, 0)  # Go to start of reading chunk
+            raw_data = np.fromfile(fid, sample_size_code, chunk_len)
+            raw_data = raw_data.reshape(samples_to_read, n_channels)
+            raw_data = (raw_data - log_gnd).T
+            _mult_cal_one(data, raw_data, idx, cals, mult)
 
     def _read_header(self):
-        self.header = _read_raw_trc_header(self.input_fname)
+        return _read_raw_trc_header(self.input_fname)
+
+
+@verbose
+def read_raw_trc(input_fname, preload=False, include=None, verbose=None):
+    return RawTRC(input_fname=input_fname, preload=preload, verbose=verbose)

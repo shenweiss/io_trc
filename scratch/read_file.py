@@ -10,6 +10,16 @@
 # trade secret or copyright law. Dissemination of this information or
 # reproduction of this material is strictly forbidden unless prior written
 # permission is obtained from FastWave LLC.
-__version__ = '0.1_dev0'
 
-from .io import read_raw_trc
+import numpy as np
+
+from mne.utils import logger
+
+import trcio
+
+fname = '/Users/fraimondo/data/intra/EEG_12.TRC'
+
+raw = trcio.read_raw_trc(fname, preload=True)
+data1, times1 = raw[:, 1:10]
+data2, times2 = trcio.read_raw_trc(fname, preload=False)[:, 1:10]
+#

@@ -10,6 +10,14 @@
 # trade secret or copyright law. Dissemination of this information or
 # reproduction of this material is strictly forbidden unless prior written
 # permission is obtained from FastWave LLC.
-__version__ = '0.1_dev0'
+from mne.io.tests.test_raw import _test_raw_reader
 
-from .io import read_raw_trc
+from trcio import read_raw_trc
+
+
+def test_read_trc():
+    """Test importing Micromed TRC files"""
+    trc_fname = '/Users/fraimondo/data/intra/EEG_12.TRC'
+    raw = read_raw_trc(trc_fname, include=None)
+    assert ('RawTRC' in repr(raw))
+    raw = _test_raw_reader(read_raw_trc, input_fname=trc_fname)
