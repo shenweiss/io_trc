@@ -192,7 +192,7 @@ def _read_raw_trc_header(input_fname, verbose=None):
         order = np.fromfile(fid, 'u2', descriptors['ORDER']['len'])
         order = order[:n_channels]
 
-        electrodes = []
+        orig_electrodes = []
         el_st = descriptors['LABCOD']['start']
         el_len = descriptors['LABCOD']['len']
         fid.seek(el_st, 0)
@@ -229,10 +229,10 @@ def _read_raw_trc_header(input_fname, verbose=None):
             t_el['pos_coord'] = np.fromfile(fid, 'u2', 1)[0]
             reserved = np.fromfile(fid, 'B', 24)  # noqa F841
             # print(t_el)
-            electrodes.append(t_el)
+            orig_electrodes.append(t_el)
 
-        electrodes = [electrodes[x] for x in order]
-        srates = np.array([x['srate_coef'] for x in electrodes])
+        srates = np.array(
+            [x['srate_coef'] for x in [orig_electrodes[y] for y in order]])
 
         if np.unique(srates).shape[0] != 1:
             raise ValueError('Cannot read data with mixed sample rates')
@@ -286,13 +286,13 @@ def _read_raw_trc_header(input_fname, verbose=None):
 
         logger.info('Reading starting impedances')
         fid.seek(descriptors['IMPED_B']['start'], 0)
-        for t_el in electrodes:
+        for t_el in orig_electrodes:
             t_el['imped_b+'] = np.fromfile(fid, 'B', 1)[0]
             t_el['imped_b-'] = np.fromfile(fid, 'B', 1)[0]
 
         logger.info('Reading ending impedances')
         fid.seek(descriptors['IMPED_E']['start'], 0)
-        for t_el in electrodes:
+        for t_el in orig_electrodes:
             t_el['imped_e+'] = np.fromfile(fid, 'B', 1)[0]
             t_el['imped_e-'] = np.fromfile(fid, 'B', 1)[0]
 
@@ -311,8 +311,8 @@ def _read_raw_trc_header(input_fname, verbose=None):
                     np.fromfile(fid, 'S1', 64).astype('U1')).strip()
             t_montage['description'] = description
             inputs = np.fromfile(fid, 'u2', 256)
-            noninv = inputs[::2]
-            inv = inputs[1::2]
+            noninv = [orig_electrodes[x]['label+'] for x in inputs[::2]]
+            inv = [orig_electrodes[x]['label+'] for x in inputs[1::2]]
             t_montage['inputs'] = np.c_[noninv, inv]
             t_montage['hipass'] = np.fromfile(fid, 'u4', 128)
             t_montage['lowpass'] = np.fromfile(fid, 'u4', 128)
@@ -337,6 +337,7 @@ def _read_raw_trc_header(input_fname, verbose=None):
                 triggers.append((sample, value))
         header['triggers'] = triggers
 
+        electrodes = [orig_electrodes[x] for x in order]
         header['electrodes'] = electrodes
 
         # Do computations to keep it simpler
