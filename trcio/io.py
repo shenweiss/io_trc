@@ -296,6 +296,32 @@ def _read_raw_trc_header(input_fname, verbose=None):
             t_el['imped_e+'] = np.fromfile(fid, 'B', 1)[0]
             t_el['imped_e-'] = np.fromfile(fid, 'B', 1)[0]
 
+        logger.info('Reading montages')
+        fid.seek(descriptors['MONTAGE']['start'], 0)
+        montages = {}
+        for i_mtg in range(n_montages):
+            t_montage = {}
+            t_montage['lines'] = np.fromfile(fid, 'u2', 1)[0]
+            t_montage['sectors'] = np.fromfile(fid, 'u2', 1)[0]
+            t_montage['base_time'] = np.fromfile(fid, 'u2', 1)[0]
+            t_montage['notch'] = np.fromfile(fid, 'u2', 1)[0]
+            t_montage['colors'] = np.fromfile(fid, 'B', 128)
+            t_montage['selection'] = np.fromfile(fid, 'B', 128)
+            description = ''.join(
+                    np.fromfile(fid, 'S1', 64).astype('U1')).strip()
+            t_montage['description'] = description
+            inputs = np.fromfile(fid, 'u2', 256)
+            noninv = inputs[::2]
+            inv = inputs[1::2]
+            t_montage['inputs'] = np.c_[noninv, inv]
+            t_montage['hipass'] = np.fromfile(fid, 'u4', 128)
+            t_montage['lowpass'] = np.fromfile(fid, 'u4', 128)
+            t_montage['reference'] = np.fromfile(fid, 'u4', 128)
+            reserverd = np.fromfile(fid, 'B', 1720)
+            montages[description] = t_montage
+            # print(t_montage)
+        header['montages'] = montages
+
         logger.info('Reading triggers')
         triggers = []
         desc_st = descriptors['TRIGGER']['start']
