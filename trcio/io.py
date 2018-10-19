@@ -244,7 +244,8 @@ def _read_raw_trc_header(input_fname, verbose=None):
         while keep_reading is True:
             sample = np.fromfile(fid, 'u4', 1)[0]
             if sample != 0:
-                text = ''.join(np.fromfile(fid, 'S1', 40).astype('U1')).strip()
+                text = np.fromfile(fid, np.unicode_, 40)
+                text = ''.join(text).strip()
                 logger.info('\tNote at sample {}: {}'.format(sample, text))
                 notes[sample] = text
             else:
@@ -280,8 +281,9 @@ def _read_raw_trc_header(input_fname, verbose=None):
                 sample = np.fromfile(fid, 'u4', 1)[0]
                 segments[sample] = time
 
-        if len(segments) != 0:
-            raise ValueError('Cannot read reduced file')
+        # TODO: Fix to read shennan's bad TRC files
+        # if len(segments) != 0:
+        #     raise ValueError('Cannot read reduced file')
         header['segments'] = segments
 
         logger.info('Reading starting impedances')
