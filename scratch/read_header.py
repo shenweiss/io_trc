@@ -17,7 +17,7 @@ from mne.utils import logger
 
 import trcio
 
-fname = '/Users/fraimondo/data/intra/EEG_12.TRC'
+fname = '/Users/fraimondo/data/intra/EEG_12_b.TRC'
 
 header = trcio.io._read_raw_trc_header(fname)
 

@@ -18,15 +18,15 @@ from mne.utils import logger
 import neo
 import trcio
 
-fname = '/Users/fraimondo/data/intra/EEG_12.TRC'
+fname = '/Users/fraimondo/data/intra/465.TRC'
 
 raw = trcio.read_raw_trc(fname, preload=True, include=None)
 # data1, times1 = raw[:, 1:10]
 # data2, times2 = trcio.read_raw_trc(fname, preload=False)[:, 1:10]
 #
-neo_reader = neo.io.micromedio.MicromedIO(fname)
-neo_seg = neo_reader.read_segment()
+# neo_reader = neo.io.micromedio.MicromedIO(fname)
+# neo_seg = neo_reader.read_segment()
 
-data = np.asarray(neo_seg.analogsignals)[0, ...].T * 1e-6
+# data = np.asarray(neo_seg.analogsignals)[0, ...].T * 1e-6
 
-assert_almost_equal(data, raw._data)
+# assert_almost_equal(data, raw._data)
