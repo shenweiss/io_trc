@@ -12,4 +12,5 @@
 # permission is obtained from FastWave LLC.
 __version__ = '0.1_dev0'
 
-from .io import read_raw_trc
+from . import io
+from .io import read_raw_trc, write_raw_trc
