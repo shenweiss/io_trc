@@ -715,7 +715,7 @@ def _write_raw_trc_header(raw, fid, verbose=None):
     t_montage['sectors'] = 0
     t_montage['base_time'] = 15
     t_montage['notch'] = 1
-    t_montage['colors'] = np.zeros(MAX_CAN_VIEW, dtype=np.uint8)
+    t_montage['colors'] = np.ones(MAX_CAN_VIEW, dtype=np.uint8)
     t_montage['selection'] = np.zeros(MAX_CAN_VIEW, dtype=np.uint8)
     t_montage['description'] = 'Ref.'
     _ref_ch = np.zeros(MAX_CAN_VIEW, dtype=np.uint16)
