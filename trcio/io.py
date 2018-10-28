@@ -37,7 +37,8 @@ _micromed_units = {
 
 MAX_CAN = 256
 MAX_LAB = 640
-MAX_NOTE = 200 
+MAX_NOTE = 200
+MAX_NOTE_SECTION = 1000
 MAX_FLAG = 100
 MAX_SAMPLE = 128 
 MAX_HISTORY = 30
@@ -252,12 +253,14 @@ def _read_raw_trc_header(input_fname, verbose=None):
 
         logger.info('Reading notes')
         notes = {}
-        fid.seek(descriptors['NOTE']['start'], 0)
+        desc_st = descriptors['NOTE']['start']
+        desc_end = desc_st + descriptors['NOTE']['len']
+        fid.seek(desc_st, 0)
         keep_reading = True
-        while keep_reading is True:
+        while keep_reading is True and fid.tell() < desc_end:
             sample = np.fromfile(fid, 'u4', 1)[0]
             if sample != 0:
-                text = np.fromfile(fid, np.unicode_, 40)
+                text = np.fromfile(fid, 'S1', 40).astype('U1')
                 text = ''.join(text).strip()
                 logger.info('\tNote at sample {}: {}'.format(sample, text))
                 notes[sample] = text
@@ -267,9 +270,11 @@ def _read_raw_trc_header(input_fname, verbose=None):
 
         logger.info('Reading flags')
         flags = []
-        fid.seek(descriptors['FLAGS']['start'], 0)
+        desc_st = descriptors['FLAGS']['start']
+        desc_end = desc_st + descriptors['FLAGS']['len']
+        fid.seek(desc_st, 0)
         keep_reading = True
-        while keep_reading is True:
+        while keep_reading is True and fid.tell() < desc_end:
             sample_st = np.fromfile(fid, 'i4', 1)[0]
             sample_end = np.fromfile(fid, 'i4', 1)[0]
             if 0 in [sample_st or sample_end]:
@@ -326,6 +331,7 @@ def _read_raw_trc_header(input_fname, verbose=None):
                     np.fromfile(fid, 'S1', 64).astype('U1')).strip()
             t_montage['description'] = description
             inputs = np.fromfile(fid, 'u2', 256)
+            t_montage['_orig_inputs'] = inputs
             noninv = [orig_electrodes[x]['label+'] for x in inputs[::2]]
             inv = [orig_electrodes[x]['label+'] for x in inputs[1::2]]
             t_montage['inputs'] = np.c_[noninv, inv]
@@ -354,6 +360,7 @@ def _read_raw_trc_header(input_fname, verbose=None):
 
         electrodes = [orig_electrodes[x] for x in order]
         header['electrodes'] = electrodes
+        header['orig_electrodes'] = orig_electrodes
 
         # Do computations to keep it simpler
 
@@ -370,13 +377,116 @@ def _read_raw_trc_header(input_fname, verbose=None):
         return header
 
 
-def _cvt_string(f_text, f_len, f_end):
+def _cvt_string(f_text, f_len, f_end, filling=0x20):
     b_text = f_text.encode('UTF-8')[:f_len]
     n_missing = f_len - len(b_text)
-    b_text += bytes([0x00] * n_missing)
+    b_text += bytes([filling] * n_missing)
     if f_end is not None:
         b_text += bytes(f_end)
     return b_text
+
+_def_el_32 = {
+    'Fp1': (90.0, 108.0), 
+    'Fp2': (90.0, 72.0), 
+    'F3': (61.79999923706055, 130.6999969482422), 
+    'F4': (61.79999923706055, 49.29999923706055), 
+    'F7': (90.0, 144.0), 
+    'F8': (90.0, 36.0), 
+    'Fz': (45.0, 90.0), 
+    'C3': (45.0, 180.0), 
+    'C4': (45.0, 0.0), 
+    'Cz': (0.0, 0.0), 
+    'P3': (61.79999923706055, 229.3000030517578), 
+    'P4': (61.79999923706055, 310.70001220703125), 
+    'Pz': (45.0, 270.0), 
+    'O1': (90.0, 252.0), 
+    'O2': (90.0, 288.0), 
+    'T3': (90.0, 180.0), 
+    'T4': (90.0, 0.0), 
+    'T5': (90.0, 216.0), 
+    'T6': (90.0, 324.0), 
+    'Fpz': (90.0, 90.0), 
+    'Oz': (90.0, 270.0), 
+    'A2': (0.0, 0.0), 
+    'A1': (0.0, 0.0), 
+    '.....': (0.0, 0.0), 
+    '.....': (0.0, 0.0), 
+    '.....': (0.0, 0.0), 
+    '.....': (0.0, 0.0), 
+    '.....': (0.0, 0.0), 
+    '.....': (0.0, 0.0), 
+    '.....': (0.0, 0.0), 
+    '.....': (0.0, 0.0)
+}
+
+def_el_172_176 = {
+    'PULS+': (0.0, 0.0, 102), 
+    'BEAT+': (0.0, 0.0, 101), 
+    'MKR+': (0.0, 0.0, 0), 
+    'SpO2+': (0.0, 0.0, 100)
+}
+
+def _default_electrodes():
+    electrodes = []
+    keys = ['status', 'type', 'label+', 'label-', 'log_min', 'log_max', 'log_gnd',
+            'phys_min', 'phys_max', 'meas_unit', 'pref_hpass_limit', 
+            'pref_hpass_type', 'pref_lpass_limit', 'pref_lpass_type', 'srate_coef',
+            'position', 'latitude', 'longitude', 'present_map', 'present_avg',
+            'description', 'pos_x', 'pos_y', 'pos_z', 'pos_coord']
+    for i in range(0, MAX_LAB):
+        t_el = {}
+        for t_k in keys:
+            t_el[t_k] = 0
+        t_el['type'] = 0
+        t_el['label+'] = '.....'
+        t_el['label-'] = '.....'   
+        t_el['position'] = 0
+        t_el['srate_coef'] = 1 
+        t_el['description'] = ''
+        electrodes.append(t_el)
+    
+    electrodes[0]['status'] = 0
+    electrodes[0]['type'] = 0
+    electrodes[0]['label+'] = 'AVG'
+    electrodes[0]['label-'] = 'G2'
+    electrodes[0]['log_max'] = 65535
+    electrodes[0]['log_gnd'] = 32768
+    electrodes[0]['phys_min'] = -3200
+    electrodes[0]['phys_max'] = 3200
+    electrodes[0]['pref_hpass_limit'] = 0
+    electrodes[0]['present_avg'] = 1
+
+    # for i, (lbl, (lat, lon)) in enumerate(_def_el_32.items()):
+    #     electrodes[i+1]['status'] = 0
+    #     electrodes[i+1]['type'] = 0
+    #     electrodes[i+1]['label+'] = lbl
+    #     electrodes[i+1]['label-'] = 'G2'
+    #     electrodes[i+1]['log_max'] = 65535
+    #     electrodes[i+1]['log_gnd'] = 32768
+    #     electrodes[i+1]['phys_min'] = -3200
+    #     electrodes[i+1]['phys_max'] = 3200
+    #     electrodes[i+1]['pref_hpass_limit'] = 0
+    #     electrodes[i+1]['present_avg'] = 1
+    #     electrodes[i+1]['latitude'] = lat
+    #     electrodes[i+1]['longitude'] = lon
+
+    # for i, (lbl, (lat, lon, unit)) in enumerate(def_el_172_176.items()):
+    #     electrodes[i+172]['status'] = 0
+    #     electrodes[i+172]['type'] = 0
+    #     electrodes[i+172]['label+'] = lbl
+    #     electrodes[i+172]['label-'] = 'G2'
+    #     electrodes[i+172]['log_max'] = 65535
+    #     electrodes[i+172]['log_gnd'] = 32768
+    #     electrodes[i+172]['phys_min'] = -3200
+    #     electrodes[i+172]['phys_max'] = 3200
+    #     electrodes[i+172]['pref_hpass_limit'] = 0
+    #     electrodes[i+172]['present_avg'] = 1
+    #     electrodes[i+172]['latitude'] = lat
+    #     electrodes[i+172]['longitude'] = lon
+    #     electrodes[i+172]['meas_unit'] = unit
+
+
+    return electrodes
 
 @verbose
 def _write_raw_trc_header(raw, fid, verbose=None):
@@ -391,10 +501,10 @@ def _write_raw_trc_header(raw, fid, verbose=None):
     #TODO: Get this info right
     header = {}
     header['laboratory'] = ''
-    header['surname'] = ''
-    header['name'] = ''
-    header['birth_month'] = 25
-    header['birth_day'] = 4
+    header['surname'] = 'LName'
+    header['name'] = 'Name'
+    header['birth_month'] = 4
+    header['birth_day'] = 25
     header['birth_year'] = 1985
     header['aq_unit'] = 35
     header['file_type'] = 74
@@ -450,7 +560,8 @@ def _write_raw_trc_header(raw, fid, verbose=None):
     # Non compressed
     fid.write(struct.pack('H', 0))
 
-    # No montages
+    # No montages for now
+    to_write_later_offsets['N_MONTAGES'] = fid.tell()
     fid.write(struct.pack('H', 0))
 
     # No video
@@ -482,9 +593,37 @@ def _write_raw_trc_header(raw, fid, verbose=None):
     reserved = bytes([0x00] * 208)
     fid.write(reserved)
 
+    # Create electrodes
+    hpass = raw.info['highpass']
+    lpass = raw.info['lowpass']
+    electrodes = _default_electrodes()
+
+    for i, ch_name in enumerate(raw.ch_names):
+        idx = i + 1
+        # idx = i + 33
+        # if idx >= 172:
+        #     idx += 4
+
+        if len(ch_name) > 5:
+            logger.warning('Channel {} will be cut to {}'.format(
+                ch_name, ch_name[:5]))
+        electrodes[idx]['status'] = 1
+        electrodes[idx]['label+'] = ch_name[:5]
+        electrodes[idx]['label-'] = 'G2'
+        electrodes[idx]['log_max'] = 65535
+        electrodes[idx]['log_gnd'] = 32768
+        electrodes[idx]['phys_min'] = -3200
+        electrodes[idx]['phys_max'] = 3200
+        electrodes[idx]['position'] = i
+        electrodes[idx]['pref_hpass_limit'] = 150
+        electrodes[idx]['present_avg'] = 0
+
     # Write order of electrodes up to 256
+    electrodes_names = [x['label+'] for x in electrodes]
     order = np.zeros(MAX_CAN, dtype=np.uint16)
-    order[:raw.info['nchan']] = np.arange(1, raw.info['nchan'] + 1)
+    for i, ch_name in enumerate(raw.ch_names):
+        idx = electrodes_names.index(ch_name)
+        order[i] = idx
     start = fid.tell()
     fid.write(struct.pack('{}H'.format(MAX_CAN), *order))
     end = fid.tell()
@@ -492,52 +631,14 @@ def _write_raw_trc_header(raw, fid, verbose=None):
     to_write_later_values['ORDER_LEN'] = end - start
 
     # Write electrodes
-    electrodes = []
-    keys = ['status', 'type', 'label+', 'label-', 'log_min', 'log_max', 'log_gnd',
-            'phys_min', 'phys_max', 'meas_unit', 'pref_hpass_limit', 
-            'pref_hpass_type', 'pref_lpass_limit', 'pref_lpass_type', 'srate_coef',
-            'position', 'latitude', 'longitude', 'present_map', 'present_avg',
-            'description', 'pos_x', 'pos_y', 'pos_z', 'pos_coord']
-
-    hpass = raw.info['highpass']
-    lpass = raw.info['lowpass']
-    for i in range(0, MAX_LAB):
-        t_el = {}
-        for t_k in keys:
-            t_el[t_k] = 0
-        t_el['type'] = 1
-        t_el['label+'] = '.....'
-        t_el['label-'] = '.....'   
-        t_el['position'] = i
-        t_el['srate_coef'] = 1 
-        t_el['description'] = ''
-        electrodes.append(t_el)
-
-    electrodes[0]['label+'] = 'AVG'
-    electrodes[0]['label-'] = 'G2'
-    electrodes[0]['log_max'] = 65535
-    electrodes[0]['log_gnd'] = 32768
-    electrodes[0]['phys_min'] = -3200
-    electrodes[0]['phys_max'] = 3200
-
-    for i, ch_name in enumerate(raw.ch_names):
-        if len(ch_name) > 5:
-            logger.warning('Channel {} will be cut to {}'.format(
-                ch_name, ch_name[:5]))
-        electrodes[i+1]['label+'] = ch_name[:5]
-        electrodes[i+1]['label-'] = 'G2'
-        electrodes[i+1]['log_max'] = 65535
-        electrodes[i+1]['log_gnd'] = 32768
-        electrodes[i+1]['phys_min'] = -3200
-        electrodes[i+1]['phys_max'] = 3200
-
     start = fid.tell()
     for i in range(0, MAX_LAB):
         t_el = electrodes[i]
+        
         fid.write(struct.pack('B', t_el['status']))
         fid.write(struct.pack('B', t_el['type']))
-        fid.write(_cvt_string(t_el['label+'], 5, [0x00]))
-        fid.write(_cvt_string(t_el['label-'], 5, [0x00]))
+        fid.write(_cvt_string(t_el['label+'], 5, [0x00], filling=0))
+        fid.write(_cvt_string(t_el['label-'], 5, [0x00], filling=0))
         fid.write(struct.pack('i', t_el['log_min']))
         fid.write(struct.pack('i', t_el['log_max']))
         fid.write(struct.pack('i', t_el['log_gnd']))
@@ -554,7 +655,7 @@ def _write_raw_trc_header(raw, fid, verbose=None):
         fid.write(struct.pack('f', t_el['longitude']))
         fid.write(struct.pack('B', t_el['present_map']))
         fid.write(struct.pack('B', t_el['present_avg']))
-        fid.write(_cvt_string(t_el['description'], 31, [0x00]))
+        fid.write(_cvt_string(t_el['description'], 31, [0x00], filling=0))
         fid.write(struct.pack('f', t_el['pos_x']))
         fid.write(struct.pack('f', t_el['pos_y']))
         fid.write(struct.pack('f', t_el['pos_z']))
@@ -568,9 +669,9 @@ def _write_raw_trc_header(raw, fid, verbose=None):
 
     # Write notes
     start = fid.tell()
-    fid.write(struct.pack('H', 1))
+    fid.write(struct.pack('I', 1))
     fid.write(_cvt_string('Created with FastWave TRC Writer', 40, None))
-    for i in range(MAX_NOTE-1):
+    for i in range(MAX_NOTE_SECTION-1):
         fid.write(bytes([0x00] * 44))
     end = fid.tell()
     to_write_later_values['NOTE_START'] = start
@@ -605,9 +706,55 @@ def _write_raw_trc_header(raw, fid, verbose=None):
     to_write_later_values['IMPED_E_LEN'] = end - start
 
     # Write montages
+
+    # Create subject specific Ref. montage
+    montages = []
+    n_lines = min(MAX_CAN_VIEW, raw.info['nchan'])
+    t_montage = {}
+    t_montage['lines'] = n_lines
+    t_montage['sectors'] = 0
+    t_montage['base_time'] = 15
+    t_montage['notch'] = 1
+    t_montage['colors'] = np.zeros(MAX_CAN_VIEW, dtype=np.uint8)
+    t_montage['selection'] = np.zeros(MAX_CAN_VIEW, dtype=np.uint8)
+    t_montage['description'] = 'Ref.'
+    _ref_ch = np.zeros(MAX_CAN_VIEW, dtype=np.uint16)
+    _idx_ch = np.zeros(MAX_CAN_VIEW, dtype=np.uint16)
+    for i, x in enumerate(raw.ch_names[:n_lines]):
+        _idx_ch[i] = electrodes_names.index(x)
+    inputs = np.hstack(np.c_[_ref_ch, _idx_ch])
+    t_montage['inputs'] = inputs
+    hipass = np.zeros(MAX_CAN_VIEW, dtype=np.uint32)
+    hipass[:n_lines] = 530
+    t_montage['hipass'] = hipass
+    lowpass = np.zeros(MAX_CAN_VIEW, dtype=np.uint32)
+    lowpass[:n_lines] = 60000
+    t_montage['lowpass'] = lowpass
+    reference = np.zeros(MAX_CAN_VIEW, dtype=np.uint32)
+    reference[:n_lines] = 400
+    t_montage['reference'] = reference
+    montages.append(t_montage)
+
+    n_montages = len(montages)
+    to_write_later_values['N_MONTAGES'] = n_montages
+
     start = fid.tell()
-    n_field = 8 + MAX_CAN_VIEW + 64 + 4 * MAX_CAN_VIEW * 4 + 1720
-    for i in range(MAX_MONT):
+    for i, t_m in enumerate(montages):
+        fid.write(struct.pack('H', t_m['lines']))
+        fid.write(struct.pack('H', t_m['sectors']))
+        fid.write(struct.pack('H', t_m['base_time']))
+        fid.write(struct.pack('H', t_m['notch']))
+        fid.write(t_m['colors'].astype('u1').tobytes())
+        fid.write(t_m['selection'].astype('u1').tobytes())
+        fid.write(_cvt_string(t_m['description'], 63, [0x00], filling=0))
+        fid.write(t_m['inputs'].astype('u2').tobytes())
+        fid.write(t_m['hipass'].astype('u4').tobytes())
+        fid.write(t_m['lowpass'].astype('u4').tobytes())
+        fid.write(t_m['reference'].astype('u4').tobytes())
+        fid.write(bytes([0x00] * 1720))
+
+    n_field = 8 + MAX_CAN_VIEW * 2 + 64 + 4 * MAX_CAN_VIEW * 4 + 1720
+    for i in range(n_montages, MAX_MONT):
         fid.write(bytes([0x00] * n_field))
     end = fid.tell()
     to_write_later_values['MONTAGE_START'] = start
@@ -629,9 +776,9 @@ def _write_raw_trc_header(raw, fid, verbose=None):
 
     # Write history
     start = fid.tell()
-    fid.write(bytes([0x00] * MAX_SAMPLE * 4))
+    fid.write(bytes([0xFF] * MAX_SAMPLE * 4))
     for i in range(MAX_HISTORY):
-        fid.write(bytes([0x00] * 2376 * 1720))
+        fid.write(bytes([0x00] * 4096))
     end = fid.tell()
     to_write_later_values['HISTORY_START'] = start
     to_write_later_values['HISTORY_LEN'] = end - start
@@ -639,7 +786,7 @@ def _write_raw_trc_header(raw, fid, verbose=None):
     # Write dvideo
     start = fid.tell()
     for i in range(MAX_FILE):
-        fid.write(bytes([0x00] * 12))
+        fid.write(bytes([0xFF] * 12))
         fid.write(bytes([0xFF] * 4))
     end = fid.tell()
     to_write_later_values['DVIDEO_START'] = start
@@ -661,34 +808,39 @@ def _write_raw_trc_header(raw, fid, verbose=None):
 
     # Write triggers
     start = fid.tell()
-    fid.write(bytes([0x00] * (6 * MAX_TRIGGER)))
+    fid.write(bytes([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF] * MAX_TRIGGER))
     end = fid.tell()
     to_write_later_values['TRIGGER_START'] = start
     to_write_later_values['TRIGGER_LEN'] = end - start
 
     # Write brain image
-    start = fid.tell()
-    end = fid.tell()
-    to_write_later_values['BRAINIMG_START'] = start
-    to_write_later_values['BRAINIMG_LEN'] = end - start
+    to_write_later_values['BRAINIMG_START'] = 0
+    to_write_later_values['BRAINIMG_LEN'] = 0
 
 
     to_write_later_values['DATA_START'] = fid.tell()
 
     for key in descriptor_keys:
-        offset = to_write_later_offsets['{}_START'.format(key)]
-        value = to_write_later_values['{}_START'.format(key)]
-        fid.seek(offset, 0)
-        fid.write(struct.pack('I', value))
-        offset = to_write_later_offsets['{}_LEN'.format(key)]
-        value = to_write_later_values['{}_LEN'.format(key)]
-        fid.seek(offset, 0)
-        fid.write(struct.pack('I', value))
+        offset_start = to_write_later_offsets['{}_START'.format(key)]
+        value_start = to_write_later_values['{}_START'.format(key)]
+        fid.seek(offset_start, 0)
+        fid.write(struct.pack('I', value_start))
+        offset_len = to_write_later_offsets['{}_LEN'.format(key)]
+        value_len = to_write_later_values['{}_LEN'.format(key)]
+        logger.info('\t {} starts at {} (len = {})'.format(
+                key, value_start, value_len))
+        fid.seek(offset_len, 0)
+        fid.write(struct.pack('I', value_len))
 
     offset = to_write_later_offsets['DATA_START']
     value = to_write_later_values['DATA_START']
     fid.seek(offset, 0)
     fid.write(struct.pack('I', value))
+
+    offset = to_write_later_offsets['N_MONTAGES']
+    value = to_write_later_values['N_MONTAGES']
+    fid.seek(offset, 0)
+    fid.write(struct.pack('H', value))
 
     fid.seek(to_write_later_values['DATA_START'], 0)
 
@@ -763,6 +915,7 @@ class RawTRC(BaseRaw):
             info, preload=preload, orig_format='float', filenames=[input_fname],
             last_samps=[header['n_samples'] - 1], raw_extras=[header],
             verbose=verbose)
+
 
     def _read_segment_file(self, data, idx, fi, start, stop, cals, mult):
 
