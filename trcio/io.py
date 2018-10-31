@@ -858,6 +858,12 @@ def _write_raw_trc_data(raw, fid, verbose=None):
 
     cals = (phys_max - phys_min) / (log_max - log_min + 1) * unit_scalar
 
+    if ((np.min(raw._data) * unit_scalar) < phys_min or 
+            (np.max(raw._data) * unit_scalar) > phys_max):
+        logger.warning(
+                'Data is out of the range [{}, {}] uV'.format(
+                    phys_min, phys_max))
+
     data = raw._data / cals
     data += log_gnd
     data = np.hstack(data.T)

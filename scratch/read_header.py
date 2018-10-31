@@ -141,8 +141,6 @@ reserved = np.fromfile(fid, 'B', 208)
 fid.seek(descriptors['ORDER']['start'], 0)
 order = np.fromfile(fid, 'u2', descriptors['ORDER']['len'])
 
-
-
 order = order[:n_channels]
 
 electrodes = []

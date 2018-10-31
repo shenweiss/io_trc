@@ -3,5 +3,6 @@
     "python.linting.flake8Enabled": true,
     "python.linting.enabled": true,
     "sync-rsync.remote": "tju:/home/fraimondo/dev/fwave/io_trc",
-    "sync-rsync.onSave": true
+    "sync-rsync.onSave": true,
+    "python.pythonPath": "/Users/fraimondo/anaconda3/envs/fwave/bin/python"
 }
