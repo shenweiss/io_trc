@@ -752,8 +752,8 @@ def _write_raw_trc_header(raw, fid, verbose=None):
         fid.write(t_m['lowpass'].astype('u4').tobytes())
         fid.write(t_m['reference'].astype('u4').tobytes())
         fid.write(bytes([0x00] * 1560))
-        fid.write(bytes([0x05] * t_m['lines'])  # Color black
-        fid.write(bytes([0x00] * (MAX_CAN_VIEW - t_m['lines']))
+        fid.write(bytes([0x05] * t_m['lines']))  # Color black
+        fid.write(bytes([0x00] * (MAX_CAN_VIEW - t_m['lines'])))
         fid.write(bytes([0x00] * 32))
 
     n_field = 8 + MAX_CAN_VIEW * 2 + 64 + 4 * MAX_CAN_VIEW * 4 + 1720
