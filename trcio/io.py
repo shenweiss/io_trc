@@ -50,6 +50,12 @@ MAX_SEGM = 100
 MAX_EVENT = 100
 AVERAGE_FREE = 108
 
+
+def _safe_unicode(text):
+    return np.array([i if len(i) > 0 and ord(i) < 128 else '' 
+                     for i in text]).astype('U1')
+
+
 @verbose
 def _read_raw_trc_header(input_fname, verbose=None):
     header = dict()
@@ -216,10 +222,13 @@ def _read_raw_trc_header(input_fname, verbose=None):
             t_el = {}
             t_el['status'] = np.fromfile(fid, 'B', 1)[0]
             t_el['type'] = np.fromfile(fid, 'B', 1)[0]
-            t_el['label+'] = ''.join(
-                np.fromfile(fid, 'S1', 6).astype('U1')).strip()
-            t_el['label-'] = ''.join(
-                np.fromfile(fid, 'S1', 6).astype('U1')).strip()
+
+            t_val = ''.join(_safe_unicode(np.fromfile(fid, 'S1', 6))).strip()
+            t_el['label+'] = t_val
+            
+            t_val = ''.join(_safe_unicode(np.fromfile(fid, 'S1', 6))).strip()
+            t_el['label-'] = t_val
+
             t_el['log_min'] = np.fromfile(fid, 'i4', 1)[0]
             t_el['log_max'] = np.fromfile(fid, 'i4', 1)[0]
             t_el['log_gnd'] = np.fromfile(fid, 'i4', 1)[0]
@@ -236,8 +245,9 @@ def _read_raw_trc_header(input_fname, verbose=None):
             t_el['longitude'] = np.fromfile(fid, 'f4', 1)[0]
             t_el['present_map'] = np.fromfile(fid, 'B', 1)[0]
             t_el['present_avg'] = np.fromfile(fid, 'B', 1)[0]
-            t_el['description'] = ''.join(
-                np.fromfile(fid, 'S1', 32).astype('U1')).strip()
+
+            t_val = ''.join(_safe_unicode(np.fromfile(fid, 'S1', 32))).strip()
+            t_el['description'] = t_val
             t_el['pos_x'] = np.fromfile(fid, 'f4', 1)[0]
             t_el['pos_y'] = np.fromfile(fid, 'f4', 1)[0]
             t_el['pos_z'] = np.fromfile(fid, 'f4', 1)[0]
@@ -260,8 +270,9 @@ def _read_raw_trc_header(input_fname, verbose=None):
         while keep_reading is True and fid.tell() < desc_end:
             sample = np.fromfile(fid, 'u4', 1)[0]
             if sample != 0:
-                text = np.fromfile(fid, 'S1', 40).astype('U1')
-                text = ''.join(text).strip()
+                text = ''.join(
+                    _safe_unicode(np.fromfile(fid, 'S1', 40))).strip()
+                text = text
                 logger.info('\tNote at sample {}: {}'.format(sample, text))
                 notes[sample] = text
             else:
@@ -328,7 +339,7 @@ def _read_raw_trc_header(input_fname, verbose=None):
             t_montage['colors'] = np.fromfile(fid, 'B', 128)
             t_montage['selection'] = np.fromfile(fid, 'B', 128)
             description = ''.join(
-                    np.fromfile(fid, 'S1', 64).astype('U1')).strip()
+                    _safe_unicode(np.fromfile(fid, 'S1', 64))).strip()
             t_montage['description'] = description
             inputs = np.fromfile(fid, 'u2', 256)
             t_montage['_orig_inputs'] = inputs
@@ -338,7 +349,7 @@ def _read_raw_trc_header(input_fname, verbose=None):
             t_montage['hipass'] = np.fromfile(fid, 'u4', 128)
             t_montage['lowpass'] = np.fromfile(fid, 'u4', 128)
             t_montage['reference'] = np.fromfile(fid, 'u4', 128)
-            reserverd = np.fromfile(fid, 'B', 1720)
+            reserved = np.fromfile(fid, 'B', 1720)
             montages[description] = t_montage
             # print(t_montage)
         header['montages'] = montages
@@ -752,8 +763,8 @@ def _write_raw_trc_header(raw, fid, verbose=None):
         fid.write(t_m['lowpass'].astype('u4').tobytes())
         fid.write(t_m['reference'].astype('u4').tobytes())
         fid.write(bytes([0x00] * 1560))
-        fid.write(bytes([0x05] * t_m['lines'])  # Color black
-        fid.write(bytes([0x00] * (MAX_CAN_VIEW - t_m['lines']))
+        fid.write(bytes([0x05] * t_m['lines']))  # Color black
+        fid.write(bytes([0x00] * (MAX_CAN_VIEW - t_m['lines'])))
         fid.write(bytes([0x00] * 32))
 
     n_field = 8 + MAX_CAN_VIEW * 2 + 64 + 4 * MAX_CAN_VIEW * 4 + 1720
