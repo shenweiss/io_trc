@@ -539,15 +539,15 @@ def _write_raw_trc_header(raw, fid, verbose=None):
     reserved = bytes([0x00] * 19)
     fid.write(reserved)
 
-    rec_time = time.gmtime(raw.info['meas_date'][0])
-
+#   rec_time = time.gmtime(raw.info['meas_date'][0])
+    
     rec_time_b = bytes([
-        rec_time.tm_mday,
-        rec_time.tm_mon,
-        rec_time.tm_year - 1900,
-        rec_time.tm_hour,
-        rec_time.tm_min,
-        rec_time.tm_sec])
+        1,
+        1,
+        10,
+        9,
+        0,
+        0])
     fid.write(rec_time_b)
 
     fid.write(struct.pack('H', header['aq_unit']))
