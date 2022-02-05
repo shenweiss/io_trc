@@ -938,7 +938,6 @@ class RawTRC(BaseRaw):
 
 
     def _read_segment_file(self, data, idx, fi, start, stop, cals, mult):
-
         header = self._raw_extras[fi]
         data_start = header['data_start']
         n_channels = header['n_channels']
@@ -954,7 +953,7 @@ class RawTRC(BaseRaw):
         logger.info('Reading {} samples from {} (len {})'.format(
             samples_to_read, chunk_start, chunk_len))
         start_time = time.time()
-        with open(self.input_fname) as fid:
+        with open(self._filenames[0]) as fid:
             fid.seek(chunk_start, 0)  # Go to start of reading chunk
             raw_data = np.fromfile(fid, sample_size_code, chunk_len)
             raw_data = raw_data.reshape(samples_to_read, n_channels)
