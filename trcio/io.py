@@ -861,6 +861,7 @@ def _write_raw_trc_header(raw, fid, verbose=None):
 
 @verbose
 def _write_raw_trc_data(raw, fid, verbose=None):
+    raw._data=-raw._data # correct for polarity reversal by MNE
     logger.info('Writing data')
     start_time = time.time()
     log_min = 0
